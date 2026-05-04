@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>Offline E‑Commerce Simulator | Cart, Checkout, LocalStorage</title>
+  <!-- Tailwind CSS + Font Awesome -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    /* Custom smooth transitions */
+    body {
+      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #eef2f5 100%);
+    }
+    .product-card, .cart-item {
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .product-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 20px 25px -12px rgba(0, 0, 0, 0.15);
+    }
+    button:active {
+      transform: scale(0.97);
+    }
+    .checkout-modal {
+      backdrop-filter: blur(8px);
+    }
+    .quantity-btn {
+      transition: all 0.1s;
+    }
+    /* custom scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #e2e8f0; border-radius: 10px; }
+    ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 10px; }
+  </style>
+</head>
+<body class="antialiased">
+
+  <!-- Header -->
+  <header class="bg-white/80 backdrop-blur-md shadow-sm sticky top-0 z-20 border-b border-gray-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 flex items-center justify-center shadow-md">
+          <i class="fas fa-store text-white text-xl"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">OfflineMart</h1>
+          <p class="text-xs text-gray-500">Simulator · Cart persists offline</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-4">
+        <button id="cartModalBtn" class="relative bg-white border border-gray-200 rounded-full px-4 py-2 shadow-sm hover:shadow-md transition flex items-center gap-2">
+          <i class="fas fa-shopping-cart text-indigo-600"></i>
+          <span class="font-medium">Cart</span>
+          <span id="cartCountBadge" class="absolute -top-2 -right-2 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">0</span>
+        </button>
+        <button id="resetStoreBtn" class="text-gray-500 hover:text-red-500 transition text-lg" title="Reset All Data (Cart + Orders)">
+          <i class="fas fa-trash-alt"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content: Products Grid -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="mb-6">
+      <h2 class="text-2xl font-bold text-gray-800">✨ Featured Items</h2>
+      <p class="text-gray-500 text-sm">Add products to cart — all data stored in your browser.</p>
+    </div>
+    <div id="productsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <!-- Products injected dynamically from JS -->
+    </div>
+
+    <!-- Order Summary Section (after checkout) -->
+    <div id="orderSummaryContainer" class="mt-12 hidden">
+      <div class="bg-white rounded-2xl shadow-md p-6 border-l-4 border-emerald-500">
+        <div class="flex justify-between items-start flex-wrap gap-3">
+          <div>
+            <h3 class="text-lg font-bold text-emerald-700"><i class="fas fa-check-circle mr-2"></i>Last Order Confirmed</h3>
+            <p class="text-sm text-gray-500" id="lastOrderDate"></p>
+          </div>
+          <div class="text-right">
+            <p class="text-xs text-gray-400">Order Total</p>
+            <p class="text-xl font-bold text-gray-800" id="lastOrderTotal">$0.00</p>
+          </div>
+        </div>
+        <div id="lastOrderItems" class="mt-3 text-sm text-gray-600"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Shopping Cart Modal (Checkout flow) -->
+  <div id="cartModal" class="fixed inset-0 z-30 hidden items-center justify-center bg-black/50 backdrop-blur-sm transition-all">
+    <div class="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl animate-fade-in-up">
+      <div class="p-5 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+        <h3 class="text-xl font-bold flex items-center gap-2"><i class="fas fa-shopping-bag text-indigo-600"></i> Your Cart</h3>
+        <button id="closeCartBtn" class="text-gray-400 hover:text-gray-600 text-2xl leading-5">&times;</button>
+      </div>
+      <div id="cartItemsList" class="p-5 overflow-y-auto max-h-96 space-y-3">
+        <!-- cart items render here -->
+      </div>
+      <div class="border-t p-5 bg-gray-50">
+        <div class="flex justify-between items-center text-lg font-bold mb-4">
+          <span>Total:</span>
+          <span id="cartTotalPrice">$0.00</span>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-3">
+          <button id="clearCartBtn" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 rounded-xl transition">Clear Cart</button>
+          <button id="checkoutBtn" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-xl shadow-md transition">Proceed to Checkout</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Checkout Confirmation Modal (simulate order placement) -->
+  <div id="checkoutModal" class="fixed inset-0 z-40 hidden items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 text-center shadow-2xl transform transition-all">
+      <div class="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
+        <i class="fas fa-check text-emerald-600 text-3xl"></i>
+      </div>
+      <h3 class="text-2xl font-bold text-gray-800">Order Placed!</h3>
+      <p class="text-gray-500 mt-2 text-sm">Your order has been simulated successfully. Cart is saved locally as order history.</p>
+      <div class="mt-6">
+        <button id="closeCheckoutBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-xl w-full">Continue Shopping</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ---------------------------- PRODUCT DATABASE ----------------------------
+    const PRODUCTS = [
+      { id: 1, name: "Wireless Headphones", price: 79.99, image: "🎧", category: "Electronics", stock: 10 },
+      { id: 2, name: "Smart Watch", price: 199.99, image: "⌚", category: "Wearables", stock: 5 },
+      { id: 3, name: "Minimalist Backpack", price: 49.99, image: "🎒", category: "Fashion", stock: 8 },
+      { id: 4, name: "USB-C Hub", price: 39.99, image: "🔌", category: "Accessories", stock: 15 },
+      { id: 5, name: "Mechanical Keyboard", price: 89.99, image: "⌨️", category: "Electronics", stock: 7 },
+      { id: 6, name: "Ceramic Mug", price: 14.99, image: "☕", category: "Home", stock: 20 },
+      { id: 7, name: "Desk Lamp", price: 34.99, image: "💡", category: "Home", stock: 12 },
+      { id: 8, name: "Running Shoes", price: 119.99, image: "👟", category: "Sports", stock: 6 }
+    ];
+
+    // ---------------------------- CART & ORDER STORAGE ----------------------------
+    // Cart structure: array of { id, name, price, quantity }
+    let cart = [];
+    // Orders history: array of { id, date, total, items, timestamp }
+    let orders = [];
+
+    // Load from localStorage
+    function loadData() {
+      const storedCart = localStorage.getItem("ecom_cart");
+      if (storedCart) {
+        try {
+          cart = JSON.parse(storedCart);
+        } catch(e) { cart = []; }
+      } else {
+        cart = [];
+      }
+      const storedOrders = localStorage.getItem("ecom_orders");
+      if (storedOrders) {
+        try {
+          orders = JSON.parse(storedOrders);
+        } catch(e) { orders = []; }
+      } else {
+        orders = [];
+      }
+    }
+
+    // Save cart to localStorage
+    function saveCart() {
+      localStorage.setItem("ecom_cart", JSON.stringify(cart));
+      updateCartUI();
+      renderCartModal();      // refresh modal if open
+      updateCartBadge();
+    }
+
+    function saveOrders() {
+      localStorage.setItem("ecom_orders", JSON.stringify(orders));
+      displayLastOrder();    // update order summary section
+    }
+
+    // Helpers
+    function updateCartBadge() {
+      const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+      const badge = document.getElementById("cartCountBadge");
+      if (badge) {
+        badge.innerText = totalItems;
+        badge.style.display = totalItems > 0 ? "flex" : "none";
+      }
+    }
+
+    // Add product to cart
+    function addToCart(productId) {
+      const product = PRODUCTS.find(p => p.id === productId);
+      if (!product) return;
+      const existing = cart.find(item => item.id === productId);
+      if (existing) {
+        existing.quantity += 1;
+      } else {
+        cart.push({
+          id: product.id,
+          name: product.name,
+          price: product.price,
+          quantity: 1,
+          image: product.image
+        });
+      }
+      saveCart();
+      showToast(`${product.name} added to cart`, "success");
+    }
+
+    // Update quantity
+    function updateQuantity(itemId, delta) {
+      const idx = cart.findIndex(item => item.id === itemId);
+      if (idx === -1) return;
+      const newQty = cart[idx].quantity + delta;
+      if (newQty <= 0) {
+        cart.splice(idx, 1);
+      } else {
+        cart[idx].quantity = newQty;
+      }
+      saveCart();
+    }
+
+    // Clear entire cart
+    function clearCart() {
+      if (cart.length === 0) return;
+      cart = [];
+      saveCart();
+      showToast("Cart cleared", "info");
+    }
+
+    // Render product grid
+    function renderProducts() {
+      const container = document.getElementById("productsGrid");
+      if (!container) return;
+      container.innerHTML = PRODUCTS.map(product => `
+        <div class="product-card bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all p-4 border border-gray-100">
+          <div class="text-5xl mb-3">${product.image}</div>
+          <h3 class="font-bold text-gray-800">${product.name}</h3>
+          <p class="text-indigo-600 font-bold text-lg mt-1">$${product.price.toFixed(2)}</p>
+          <p class="text-xs text-gray-400 mt-1">Stock: ${product.stock}</p>
+          <button onclick="addToCart(${product.id})" class="mt-3 w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 py-2 rounded-xl font-medium transition flex items-center justify-center gap-2"><i class="fas fa-cart-plus"></i> Add to Cart</button>
+        </div>
+      `).join('');
+    }
+
+    // Render cart modal content
+    function renderCartModal() {
+      const cartContainer = document.getElementById("cartItemsList");
+      const totalSpan = document.getElementById("cartTotalPrice");
+      if (!cartContainer) return;
+      if (cart.length === 0) {
+        cartContainer.innerHTML = `<div class="text-center py-10 text-gray-400"><i class="fas fa-bag-shopping text-4xl mb-2"></i><p>Your cart is empty</p></div>`;
+        if (totalSpan) totalSpan.innerText = "$0.00";
+        return;
+      }
+      let total = 0;
+      const itemsHtml = cart.map(item => {
+        const itemTotal = item.price * item.quantity;
+        total += itemTotal;
+        return `
+          <div class="cart-item flex justify-between items-center bg-gray-50 p-3 rounded-xl">
+            <div class="flex items-center gap-3">
+              <div class="text-2xl">${item.image || '📦'}</div>
+              <div>
+                <p class="font-semibold">${item.name}</p>
+                <p class="text-sm text-gray-500">$${item.price.toFixed(2)}</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="flex items-center border rounded-lg bg-white">
+                <button class="quantity-btn px-2 py-1 text-gray-600 hover:bg-gray-100" onclick="updateQuantity(${item.id}, -1)">-</button>
+                <span class="w-8 text-center">${item.quantity}</span>
+                <button class="quantity-btn px-2 py-1 text-gray-600 hover:bg-gray-100" onclick="updateQuantity(${item.id}, 1)">+</button>
+              </div>
+              <span class="font-mono w-20 text-right">$${itemTotal.toFixed(2)}</span>
+              <button onclick="updateQuantity(${item.id}, -${item.quantity})" class="text-red-400 hover:text-red-600"><i class="fas fa-trash-alt"></i></button>
+            </div>
+          </div>
+        `;
+      }).join('');
+      cartContainer.innerHTML = itemsHtml;
+      if (totalSpan) totalSpan.innerText = `$${total.toFixed(2)}`;
+    }
+
+    function updateCartUI() {
+      renderCartModal();   // update modal if visible
+      updateCartBadge();
+    }
+
+    // Checkout: create order, clear cart, update orders history
+    function checkout() {
+      if (cart.length === 0) {
+        showToast("Cart is empty. Add some items first!", "error");
+        return;
+      }
+      const orderTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      const newOrder = {
+        id: Date.now(),
+        date: new Date().toLocaleString(),
+        total: orderTotal,
+        items: cart.map(item => ({ ...item })), // clone
+        timestamp: Date.now()
+      };
+      orders.unshift(newOrder);   // latest first
+      saveOrders();
+      // Clear cart
+      cart = [];
+      saveCart();
+      // Hide cart modal if open
+      document.getElementById("cartModal").classList.add("hidden");
+      // Show confirmation modal
+      const checkoutModal = document.getElementById("checkoutModal");
+      checkoutModal.classList.remove("hidden");
+      checkoutModal.classList.add("flex");
+      showToast("Order placed! Check order summary.", "success");
+      displayLastOrder();
+    }
+
+    // Display last order in dedicated section
+    function displayLastOrder() {
+      const container = document.getElementById("orderSummaryContainer");
+      if (!container) return;
+      if (orders.length === 0) {
+        container.classList.add("hidden");
+        return;
+      }
+      const last = orders[0];
+      document.getElementById("lastOrderDate").innerText = `Placed: ${last.date}`;
+      document.getElementById("lastOrderTotal").innerText = `$${last.total.toFixed(2)}`;
+      const itemsHtml = last.items.map(item => `${item.name} x${item.quantity}`).join(", ");
+      document.getElementById("lastOrderItems").innerHTML = `<span class="font-medium">Items:</span> ${itemsHtml}`;
+      container.classList.remove("hidden");
+    }
+
+    // Reset entire store (cart + orders)
+    function resetAllData() {
+      if (confirm("⚠️ This will delete your cart AND all order history. Are you sure?")) {
+        cart = [];
+        orders = [];
+        saveCart();
+        saveOrders();
+        renderCartModal();
+        updateCartBadge();
+        displayLastOrder();
+        showToast("All data (cart & orders) has been reset.", "info");
+        // Also close any open modals
+        document.getElementById("cartModal").classList.add("hidden");
+        document.getElementById("checkoutModal").classList.add("hidden");
+      }
+    }
+
+    // Toast notification (simple)
+    let toastTimeout = null;
+    function showToast(message, type = "success") {
+      const existingToast = document.getElementById("dynamicToast");
+      if (existingToast) existingToast.remove();
+      const toast = document.createElement("div");
+      toast.id = "dynamicToast";
+      toast.className = `fixed bottom-5 left-1/2 transform -translate-x-1/2 z-50 px-5 py-3 rounded-xl shadow-lg text-white text-sm font-medium flex items-center gap-2 transition-all duration-300 ${type === "success" ? "bg-emerald-600" : type === "error" ? "bg-red-500" : "bg-gray-800"}`;
+      toast.innerHTML = `<i class="fas ${type === "success" ? "fa-check-circle" : type === "error" ? "fa-exclamation-circle" : "fa-info-circle"}"></i> ${message}`;
+      document.body.appendChild(toast);
+      if (toastTimeout) clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => { toast.style.opacity = "0"; setTimeout(() => toast.remove(), 300); }, 2500);
+    }
+
+    // Modal controls
+    function openCartModal() {
+      const modal = document.getElementById("cartModal");
+      renderCartModal();
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+    }
+    function closeCartModal() {
+      document.getElementById("cartModal").classList.add("hidden");
+    }
+    function closeCheckoutModal() {
+      document.getElementById("checkoutModal").classList.add("hidden");
+    }
+
+    // Expose global functions for inline buttons
+    window.addToCart = addToCart;
+    window.updateQuantity = updateQuantity;
+
+    // Initialize UI and event listeners
+    document.addEventListener("DOMContentLoaded", () => {
+      loadData();
+      renderProducts();
+      updateCartBadge();
+      renderCartModal();
+      displayLastOrder();
+
+      // Event listeners
+      document.getElementById("cartModalBtn").addEventListener("click", openCartModal);
+      document.getElementById("closeCartBtn").addEventListener("click", closeCartModal);
+      document.getElementById("clearCartBtn").addEventListener("click", () => {
+        if (cart.length > 0) {
+          clearCart();
+          showToast("Cart cleared", "info");
+        } else {
+          showToast("Cart already empty", "info");
+        }
+      });
+      document.getElementById("checkoutBtn").addEventListener("click", () => {
+        checkout();
+      });
+      document.getElementById("closeCheckoutBtn").addEventListener("click", closeCheckoutModal);
+      document.getElementById("resetStoreBtn").addEventListener("click", resetAllData);
+      // Click outside modal to close
+      window.addEventListener("click", (e) => {
+        const modal = document.getElementById("cartModal");
+        if (e.target === modal) closeCartModal();
+        const checkoutModalElem = document.getElementById("checkoutModal");
+        if (e.target === checkoutModalElem) closeCheckoutModal();
+      });
+    });
+  </script>
+
+  <style>
+    /* Fade in animation for modals */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in-up {
+      animation: fadeInUp 0.25s ease-out;
+    }
+  </style>
+</body>
+</html>
